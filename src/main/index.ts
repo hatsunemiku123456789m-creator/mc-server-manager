@@ -50,8 +50,10 @@ type UpdateStatus =
 function createWindow(): BrowserWindow {
   // Create the browser window.
   const win = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1200,
+    height: 820,
+    minWidth: 900,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
@@ -62,6 +64,7 @@ function createWindow(): BrowserWindow {
   })
 
   win.on('ready-to-show', () => {
+    win.maximize()
     win.show()
   })
 
@@ -110,6 +113,9 @@ app.whenReady().then(() => {
   }
 
   if (app.isPackaged) {
+    if (typeof process.env.GH_TOKEN === 'string') delete process.env.GH_TOKEN
+    if (typeof process.env.GITHUB_TOKEN === 'string') delete process.env.GITHUB_TOKEN
+
     autoUpdater.autoDownload = true
     autoUpdater.autoInstallOnAppQuit = true
 
@@ -140,12 +146,14 @@ app.whenReady().then(() => {
         version: info.version
       })
     )
-    autoUpdater.on('error', (e) => emitUpdateStatus({ state: 'error', message: String(e) }))
+    autoUpdater.on('error', () =>
+      emitUpdateStatus({ state: 'error', message: '更新檢查失敗，請稍後再試' })
+    )
 
     setTimeout(() => {
       void autoUpdater
         .checkForUpdates()
-        .catch((e) => emitUpdateStatus({ state: 'error', message: String(e) }))
+        .catch(() => emitUpdateStatus({ state: 'error', message: '更新檢查失敗，請稍後再試' }))
     }, 2500)
   }
 

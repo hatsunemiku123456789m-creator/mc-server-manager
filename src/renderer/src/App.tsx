@@ -482,7 +482,17 @@ function App(): React.JSX.Element {
         ))}
       </div>
 
-      <div style={{ flex: 1, padding: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div
+        style={{
+          flex: 1,
+          padding: 14,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 12,
+          minHeight: 0,
+          overflow: 'auto'
+        }}
+      >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>Minecraft Server Manager</div>
           <div style={{ fontSize: 12, opacity: 0.85 }}>狀態：{status}</div>
