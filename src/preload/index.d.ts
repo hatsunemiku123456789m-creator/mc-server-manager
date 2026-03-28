@@ -25,6 +25,12 @@ type UpdateStatus =
 
 type UpdateRepoInfo = { owner: string; repo: string } | null
 
+type ServerProperties = {
+  exists: boolean
+  properties: Record<string, string>
+  secretKeys: string[]
+}
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -48,6 +54,8 @@ declare global {
       startServer: (p: ServerProfile) => Promise<boolean>
       stopServer: () => Promise<boolean>
       sendCommand: (cmd: string) => Promise<boolean>
+      getServerProperties: (p: ServerProfile) => Promise<ServerProperties>
+      setServerProperties: (p: ServerProfile, props: Record<string, string>) => Promise<boolean>
       analyzeMods: (p: ServerProfile) => Promise<ModIssue[]>
 
       searchModpacks: (query: string, projectType?: 'modpack' | 'mod') => Promise<ModpackInfo[]>

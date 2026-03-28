@@ -500,6 +500,85 @@ const ensureEula = async (profile: ServerProfile): Promise<void> => {
   await writeFile(p, 'eula=true\n', 'utf-8')
 }
 
+const serverPropertiesPath = (profile: ServerProfile): string =>
+  join(profile.serverPath, 'server.properties')
+
+const SECRET_PROPERTY_KEYS = new Set(['rcon.password'])
+
+type ServerPropertiesResult = {
+  exists: boolean
+  properties: Record<string, string>
+  secretKeys: string[]
+}
+
+export const readServerProperties = async (
+  profile: ServerProfile
+): Promise<ServerPropertiesResult> => {
+  await ensureDir(profile.serverPath)
+  const p = serverPropertiesPath(profile)
+  if (!existsSync(p)) return { exists: false, properties: {}, secretKeys: [] }
+  const raw = await readFile(p, 'utf-8')
+  const props: Record<string, string> = {}
+  const secretKeys: string[] = []
+  for (const line of raw.split(/\r?\n/)) {
+    const t = line.trim()
+    if (!t || t.startsWith('#')) continue
+    const idx = line.indexOf('=')
+    if (idx < 0) continue
+    const key = line.slice(0, idx).trim()
+    const value = line.slice(idx + 1)
+    if (!key) continue
+    if (SECRET_PROPERTY_KEYS.has(key)) {
+      secretKeys.push(key)
+      props[key] = ''
+    } else {
+      props[key] = value
+    }
+  }
+  return { exists: true, properties: props, secretKeys }
+}
+
+export const writeServerProperties = async (
+  profile: ServerProfile,
+  next: Record<string, string>,
+  opts?: { keepSecretIfEmpty?: boolean }
+): Promise<void> => {
+  await ensureDir(profile.serverPath)
+  const p = serverPropertiesPath(profile)
+  const keepSecretIfEmpty = opts?.keepSecretIfEmpty !== false
+  const existing = existsSync(p) ? await readFile(p, 'utf-8') : ''
+  const lines = existing ? existing.split(/\r?\n/) : []
+  const keyToLine = new Map<string, number>()
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const t = line.trim()
+    if (!t || t.startsWith('#')) continue
+    const idx = line.indexOf('=')
+    if (idx < 0) continue
+    const key = line.slice(0, idx).trim()
+    if (!key) continue
+    if (!keyToLine.has(key)) keyToLine.set(key, i)
+  }
+
+  const writeOne = (key: string, value: string): void => {
+    const idx = keyToLine.get(key)
+    if (idx === undefined) {
+      lines.push(`${key}=${value}`)
+      keyToLine.set(key, lines.length - 1)
+      return
+    }
+    lines[idx] = `${key}=${value}`
+  }
+
+  for (const [key, value] of Object.entries(next)) {
+    if (SECRET_PROPERTY_KEYS.has(key) && keepSecretIfEmpty && value === '') continue
+    writeOne(key, value)
+  }
+
+  const out = lines.join('\n').replace(/\n+$/, '') + '\n'
+  await writeFile(p, out, 'utf-8')
+}
+
 const vanillaServerJarPath = (profile: ServerProfile): string =>
   join(profile.serverPath, 'server.jar')
 const paperServerJarPath = (profile: ServerProfile): string => join(profile.serverPath, 'paper.jar')

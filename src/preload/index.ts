@@ -116,6 +116,12 @@ export type UpdateStatus =
 
 export type UpdateRepoInfo = { owner: string; repo: string } | null
 
+export type ServerProperties = {
+  exists: boolean
+  properties: Record<string, string>
+  secretKeys: string[]
+}
+
 const api = {
   getState: async (): Promise<PersistedState> => await ipcRenderer.invoke('mc:state:get'),
   getSettings: async (): Promise<AppSettings> => await ipcRenderer.invoke('mc:settings:get'),
@@ -147,6 +153,10 @@ const api = {
   stopServer: async (): Promise<boolean> => await ipcRenderer.invoke('mc:server:stop'),
   sendCommand: async (cmd: string): Promise<boolean> =>
     await ipcRenderer.invoke('mc:server:cmd', cmd),
+  getServerProperties: async (p: ServerProfile): Promise<ServerProperties> =>
+    await ipcRenderer.invoke('mc:server:properties:get', p),
+  setServerProperties: async (p: ServerProfile, props: Record<string, string>): Promise<boolean> =>
+    await ipcRenderer.invoke('mc:server:properties:set', p, props),
   analyzeMods: async (p: ServerProfile): Promise<ModIssue[]> =>
     await ipcRenderer.invoke('mc:mods:analyze', p),
   searchModpacks: async (

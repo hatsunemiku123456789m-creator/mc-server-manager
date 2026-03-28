@@ -109,6 +109,12 @@ type UpdateStatus =
 
 type UpdateRepoInfo = { owner: string; repo: string } | null
 
+type ServerProperties = {
+  exists: boolean
+  properties: Record<string, string>
+  secretKeys: string[]
+}
+
 type CoreInfo = { id: CoreType; label: string }
 
 const sanitizeFolderName = (name: string): string => {
@@ -140,6 +146,14 @@ function App(): React.JSX.Element {
   const [updateStatus, setUpdateStatus] = React.useState<UpdateStatus | null>(null)
   const [appVersion, setAppVersion] = React.useState<string>('')
   const [updateRepo, setUpdateRepo] = React.useState<UpdateRepoInfo>(null)
+  const [serverProps, setServerProps] = React.useState<ServerProperties | null>(null)
+  const [serverPropsPatch, setServerPropsPatch] = React.useState<Record<string, string>>({})
+  const [serverPropsLoading, setServerPropsLoading] = React.useState(false)
+  const [serverPropsSaving, setServerPropsSaving] = React.useState(false)
+  const [serverPropsError, setServerPropsError] = React.useState<string | null>(null)
+  const [customPropKey, setCustomPropKey] = React.useState('')
+  const [customPropValue, setCustomPropValue] = React.useState('')
+  const [tab, setTab] = React.useState<'console' | 'modpack' | 'backup' | 'server'>('console')
 
   const selected = React.useMemo(
     () => profiles.find((p) => p.id === selectedId) ?? null,
@@ -453,7 +467,66 @@ function App(): React.JSX.Element {
     }
   }
 
-  const [tab, setTab] = React.useState<'console' | 'modpack' | 'backup'>('console')
+  const loadServerProperties = React.useCallback(async (): Promise<void> => {
+    const p = profiles.find((x) => x.id === selectedId) ?? null
+    if (!p) return
+    setServerPropsLoading(true)
+    setServerPropsError(null)
+    try {
+      const res = (await window.api.getServerProperties(p)) as unknown as ServerProperties
+      setServerProps(res)
+      setServerPropsPatch({})
+    } catch (e) {
+      setServerPropsError(String(e))
+    } finally {
+      setServerPropsLoading(false)
+    }
+  }, [profiles, selectedId])
+
+  React.useEffect(() => {
+    if (tab !== 'server') return
+    loadServerProperties()
+  }, [tab, loadServerProperties])
+
+  const propValue = (key: string): string =>
+    serverPropsPatch[key] ?? serverProps?.properties?.[key] ?? ''
+
+  const setPropValue = (key: string, value: string): void => {
+    setServerPropsPatch((prev) => ({ ...prev, [key]: value }))
+  }
+
+  const addCustomProp = (): void => {
+    const k = customPropKey.trim()
+    if (!k) return
+    setPropValue(k, customPropValue)
+    setCustomPropKey('')
+    setCustomPropValue('')
+  }
+
+  const saveServerProperties = async (): Promise<void> => {
+    if (!selected) return
+    if (status !== 'stopped') return
+    if (!Object.keys(serverPropsPatch).length) return
+    setServerPropsSaving(true)
+    setServerPropsError(null)
+    try {
+      await window.api.setServerProperties(selected, serverPropsPatch)
+      setServerProps((prev) => {
+        const base = prev ?? { exists: true, properties: {}, secretKeys: [] }
+        return {
+          ...base,
+          exists: true,
+          properties: { ...base.properties, ...serverPropsPatch }
+        }
+      })
+      setServerPropsPatch({})
+      setLogs((prev) => [...prev, '--- 已儲存 server.properties ---'])
+    } catch (e) {
+      setServerPropsError(String(e))
+    } finally {
+      setServerPropsSaving(false)
+    }
+  }
 
   return (
     <div style={{ display: 'flex', height: '100vh' }}>
@@ -668,6 +741,7 @@ function App(): React.JSX.Element {
                   </button>
                   <button onClick={checkMods}>檢查模組</button>
                   <button onClick={() => setTab('console')}>控制台</button>
+                  <button onClick={() => setTab('server')}>伺服器設定</button>
                   <button onClick={() => setTab('modpack')}>模組包</button>
                   <button onClick={() => setTab('backup')}>備份</button>
                 </div>
@@ -730,6 +804,244 @@ function App(): React.JSX.Element {
                     </button>
                   </div>
                 </>
+              )}
+
+              {tab === 'server' && (
+                <div style={{ display: 'flex', flexDirection: 'column', height: '100%', gap: 10 }}>
+                  <div style={{ fontWeight: 700 }}>伺服器設定（server.properties）</div>
+
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <button
+                      onClick={loadServerProperties}
+                      disabled={!selected || serverPropsLoading}
+                    >
+                      重新讀取
+                    </button>
+                    <button
+                      onClick={saveServerProperties}
+                      disabled={
+                        !selected ||
+                        status !== 'stopped' ||
+                        serverPropsSaving ||
+                        serverPropsLoading ||
+                        Object.keys(serverPropsPatch).length === 0
+                      }
+                    >
+                      儲存
+                    </button>
+                    <button
+                      onClick={() => selected && window.api.openPath(selected.serverPath)}
+                      disabled={!selected}
+                    >
+                      開伺服器資料夾
+                    </button>
+                    {serverProps?.exists === false ? (
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>
+                        未有 server.properties（第一次儲存會建立）
+                      </div>
+                    ) : null}
+                    {status !== 'stopped' ? (
+                      <div style={{ fontSize: 12, opacity: 0.8 }}>請先 Stop 再改設定</div>
+                    ) : null}
+                  </div>
+
+                  {serverPropsLoading ? (
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>讀取中...</div>
+                  ) : null}
+                  {serverPropsError ? (
+                    <div style={{ fontSize: 12, opacity: 0.8 }}>{serverPropsError}</div>
+                  ) : null}
+
+                  <div
+                    style={{
+                      flex: 1,
+                      overflow: 'auto',
+                      border: '1px solid #2a2a2a',
+                      borderRadius: 8,
+                      padding: 10
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '160px 1fr',
+                        gap: 8,
+                        alignItems: 'center'
+                      }}
+                    >
+                      <div>MOTD</div>
+                      <input
+                        value={propValue('motd')}
+                        onChange={(e) => setPropValue('motd', e.target.value)}
+                      />
+
+                      <div>Max players</div>
+                      <input
+                        value={propValue('max-players')}
+                        onChange={(e) => setPropValue('max-players', e.target.value)}
+                        placeholder="例如 20"
+                      />
+
+                      <div>Online mode</div>
+                      <select
+                        value={propValue('online-mode')}
+                        onChange={(e) => setPropValue('online-mode', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>Difficulty</div>
+                      <select
+                        value={propValue('difficulty')}
+                        onChange={(e) => setPropValue('difficulty', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="peaceful">peaceful</option>
+                        <option value="easy">easy</option>
+                        <option value="normal">normal</option>
+                        <option value="hard">hard</option>
+                      </select>
+
+                      <div>Gamemode</div>
+                      <select
+                        value={propValue('gamemode')}
+                        onChange={(e) => setPropValue('gamemode', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="survival">survival</option>
+                        <option value="creative">creative</option>
+                        <option value="adventure">adventure</option>
+                        <option value="spectator">spectator</option>
+                      </select>
+
+                      <div>PVP</div>
+                      <select
+                        value={propValue('pvp')}
+                        onChange={(e) => setPropValue('pvp', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>View distance</div>
+                      <input
+                        value={propValue('view-distance')}
+                        onChange={(e) => setPropValue('view-distance', e.target.value)}
+                        placeholder="例如 10"
+                      />
+
+                      <div>Simulation distance</div>
+                      <input
+                        value={propValue('simulation-distance')}
+                        onChange={(e) => setPropValue('simulation-distance', e.target.value)}
+                        placeholder="例如 10"
+                      />
+
+                      <div>Spawn protection</div>
+                      <input
+                        value={propValue('spawn-protection')}
+                        onChange={(e) => setPropValue('spawn-protection', e.target.value)}
+                        placeholder="例如 16"
+                      />
+
+                      <div>Allow flight</div>
+                      <select
+                        value={propValue('allow-flight')}
+                        onChange={(e) => setPropValue('allow-flight', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>Command block</div>
+                      <select
+                        value={propValue('enable-command-block')}
+                        onChange={(e) => setPropValue('enable-command-block', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>Enforce whitelist</div>
+                      <select
+                        value={propValue('enforce-whitelist')}
+                        onChange={(e) => setPropValue('enforce-whitelist', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>White list</div>
+                      <select
+                        value={propValue('white-list')}
+                        onChange={(e) => setPropValue('white-list', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>Enable RCON</div>
+                      <select
+                        value={propValue('enable-rcon')}
+                        onChange={(e) => setPropValue('enable-rcon', e.target.value)}
+                      >
+                        <option value="">（不改）</option>
+                        <option value="true">true</option>
+                        <option value="false">false</option>
+                      </select>
+
+                      <div>RCON port</div>
+                      <input
+                        value={propValue('rcon.port')}
+                        onChange={(e) => setPropValue('rcon.port', e.target.value)}
+                        placeholder="例如 25575"
+                      />
+
+                      <div>RCON password</div>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        <input
+                          style={{ flex: 1 }}
+                          type="password"
+                          value={propValue('rcon.password')}
+                          onChange={(e) => setPropValue('rcon.password', e.target.value)}
+                          placeholder={
+                            serverProps?.secretKeys?.includes('rcon.password') &&
+                            propValue('rcon.password') === ''
+                              ? '（已設定）'
+                              : ''
+                          }
+                        />
+                        <button onClick={() => setPropValue('rcon.password', '')}>保持原有</button>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: 12, borderTop: '1px solid #2a2a2a', paddingTop: 12 }}>
+                      <div style={{ fontWeight: 700, marginBottom: 8 }}>自訂設定</div>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        <input
+                          style={{ width: 220 }}
+                          value={customPropKey}
+                          onChange={(e) => setCustomPropKey(e.target.value)}
+                          placeholder="key（例如 max-tick-time）"
+                        />
+                        <input
+                          style={{ flex: 1, minWidth: 240 }}
+                          value={customPropValue}
+                          onChange={(e) => setCustomPropValue(e.target.value)}
+                          placeholder="value（例如 -1）"
+                        />
+                        <button onClick={addCustomProp}>加入/更新</button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               )}
 
               {tab === 'modpack' && (

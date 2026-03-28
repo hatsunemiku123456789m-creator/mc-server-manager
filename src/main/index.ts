@@ -20,6 +20,7 @@ import {
   listVersions,
   loadState,
   openPathInExplorer,
+  readServerProperties,
   saveState,
   setSettings,
   setWindowState,
@@ -30,6 +31,7 @@ import {
   backupWorld,
   restoreWorld,
   listBackups,
+  writeServerProperties,
   type AppSettings,
   type CoreType,
   type DownloadProgress,
@@ -264,6 +266,18 @@ app.whenReady().then(async () => {
   ipcMain.handle('mc:update:repo', async (): Promise<UpdateRepoInfo> => parseAppUpdateRepo())
 
   ipcMain.handle('mc:update:get', async (): Promise<UpdateStatus> => updateStatus)
+
+  ipcMain.handle('mc:server:properties:get', async (_evt, profile: ServerProfile) => {
+    return await readServerProperties(profile)
+  })
+
+  ipcMain.handle(
+    'mc:server:properties:set',
+    async (_evt, profile: ServerProfile, props: Record<string, string>): Promise<boolean> => {
+      await writeServerProperties(profile, props, { keepSecretIfEmpty: true })
+      return true
+    }
+  )
 
   ipcMain.handle('mc:update:check', async (): Promise<boolean> => {
     if (!app.isPackaged) {
