@@ -1,0 +1,9 @@
+out
+dist
+dist2
+dist3
+dist*
+pnpm-lock.yaml
+LICENSE.md
+tsconfig.json
+tsconfig.*.json
