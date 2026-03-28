@@ -15,13 +15,19 @@ An Electron application with React and TypeScript
 ### 發佈新版
 
 1. 提升 `package.json` 嘅 version
-2. 打包並發佈到 GitHub Releases（Windows）
+2. 發佈到 GitHub Releases（Windows）
+
+**方式 A（手動）**
 
 ```bash
 npm run build:win
 ```
 
 打包產物會喺 `dist3/`，將 `mc-server-manager-*-setup.exe`、`latest.yml` 同 blockmap 一齊上傳到同一個 release。
+
+**方式 B（GitHub Actions，自動）**
+
+打 tag 並 push 上去（例如 `v1.0.1`），Actions 會自動打包並建立 Release，上傳同一套檔案。
 
 注意：如果 `GH_OWNER/GH_REPO` 冇設定，build 會用 placeholder，打出嚟嘅 app 會檢查唔到更新；正式發佈請務必設定好。
 

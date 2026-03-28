@@ -1,0 +1,40 @@
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          $parts = "${{ github.repository }}".Split("/")
+          $env:GH_OWNER = $parts[0]
+          $env:GH_REPO = $parts[1]
+          npm run build:win
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist3/*.exe
+            dist3/*.yml
+            dist3/*.blockmap
