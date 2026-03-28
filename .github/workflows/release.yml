@@ -25,15 +25,23 @@ jobs:
 
       - name: Build installer
         shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
         run: |
           $parts = "${{ github.repository }}".Split("/")
           $env:GH_OWNER = $parts[0]
           $env:GH_REPO = $parts[1]
           npm run build:win
 
+      - name: List artifacts
+        shell: pwsh
+        run: |
+          Get-ChildItem dist3 -File | Select-Object Name,Length
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          fail_on_unmatched_files: true
           files: |
             dist3/*.exe
             dist3/*.yml
