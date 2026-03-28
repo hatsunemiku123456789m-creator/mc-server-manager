@@ -7,3 +7,5 @@ out
 *.exe
 *.blockmap
 latest.yml
+.env
+.env.*

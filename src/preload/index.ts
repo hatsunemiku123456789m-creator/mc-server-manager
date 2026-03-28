@@ -114,6 +114,8 @@ export type UpdateStatus =
   | { state: 'downloaded'; message: string; version?: string }
   | { state: 'error'; message: string }
 
+export type UpdateRepoInfo = { owner: string; repo: string } | null
+
 const api = {
   getState: async (): Promise<PersistedState> => await ipcRenderer.invoke('mc:state:get'),
   getSettings: async (): Promise<AppSettings> => await ipcRenderer.invoke('mc:settings:get'),
@@ -121,7 +123,9 @@ const api = {
     await ipcRenderer.invoke('mc:settings:set', patch),
   pickSettingPath: async (kind: 'serverRoot' | 'downloadRoot'): Promise<AppSettings> =>
     await ipcRenderer.invoke('mc:settings:pick', kind),
+  getAppVersion: async (): Promise<string> => await ipcRenderer.invoke('mc:app:version'),
   uninstallApp: async (): Promise<boolean> => await ipcRenderer.invoke('mc:app:uninstall'),
+  getUpdateRepo: async (): Promise<UpdateRepoInfo> => await ipcRenderer.invoke('mc:update:repo'),
   getUpdateStatus: async (): Promise<UpdateStatus> => await ipcRenderer.invoke('mc:update:get'),
   checkForUpdates: async (): Promise<boolean> => await ipcRenderer.invoke('mc:update:check'),
   quitAndInstallUpdate: async (): Promise<boolean> =>

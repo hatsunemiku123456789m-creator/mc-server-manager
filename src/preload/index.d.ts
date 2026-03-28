@@ -23,6 +23,8 @@ type UpdateStatus =
   | { state: 'downloaded'; message: string; version?: string }
   | { state: 'error'; message: string }
 
+type UpdateRepoInfo = { owner: string; repo: string } | null
+
 declare global {
   interface Window {
     electron: ElectronAPI
@@ -31,8 +33,10 @@ declare global {
       getSettings: () => Promise<AppSettings>
       setSettings: (patch: Partial<AppSettings>) => Promise<AppSettings>
       pickSettingPath: (kind: 'serverRoot' | 'downloadRoot') => Promise<AppSettings>
+      getAppVersion: () => Promise<string>
       uninstallApp: () => Promise<boolean>
       getUpdateStatus: () => Promise<UpdateStatus>
+      getUpdateRepo: () => Promise<UpdateRepoInfo>
       checkForUpdates: () => Promise<boolean>
       quitAndInstallUpdate: () => Promise<boolean>
       listCores: () => Promise<{ id: CoreType; label: string }[]>

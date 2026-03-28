@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
-import { existsSync } from 'fs'
+import { existsSync, readFileSync } from 'fs'
 import { spawn } from 'child_process'
 import { dirname, join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -7,6 +7,7 @@ import { autoUpdater } from 'electron-updater'
 import icon from '../../resources/icon.png?asset'
 import {
   getSettings,
+  getWindowState,
   ManagedServer,
   analyzeMods,
   createDefaultProfile,
@@ -21,6 +22,7 @@ import {
   openPathInExplorer,
   saveState,
   setSettings,
+  setWindowState,
   selectFolder,
   searchModpacks,
   listModpackVersions,
@@ -47,11 +49,35 @@ type UpdateStatus =
   | { state: 'downloaded'; message: string; version?: string }
   | { state: 'error'; message: string }
 
-function createWindow(): BrowserWindow {
+type UpdateRepoInfo = { owner: string; repo: string } | null
+
+const parseAppUpdateRepo = (): UpdateRepoInfo => {
+  try {
+    const p = join(process.resourcesPath, 'app-update.yml')
+    if (!existsSync(p)) return null
+    const raw = readFileSync(p, 'utf-8')
+    const owner = raw.match(/^\s*owner:\s*(.+)\s*$/m)?.[1]?.trim()
+    const repo = raw.match(/^\s*repo:\s*(.+)\s*$/m)?.[1]?.trim()
+    if (!owner || !repo) return null
+    return { owner, repo }
+  } catch {
+    return null
+  }
+}
+
+async function createWindow(): Promise<BrowserWindow> {
   // Create the browser window.
+  const ws = await getWindowState()
+  const bounds =
+    ws?.bounds &&
+    [ws.bounds.x, ws.bounds.y, ws.bounds.width, ws.bounds.height].every(Number.isFinite)
+      ? ws.bounds
+      : null
   const win = new BrowserWindow({
-    width: 1200,
-    height: 820,
+    width: bounds?.width ?? 1200,
+    height: bounds?.height ?? 820,
+    x: bounds?.x,
+    y: bounds?.y,
     minWidth: 900,
     minHeight: 640,
     show: false,
@@ -64,8 +90,17 @@ function createWindow(): BrowserWindow {
   })
 
   win.on('ready-to-show', () => {
-    win.maximize()
+    if (ws?.isMaximized) win.maximize()
     win.show()
+  })
+
+  win.on('close', () => {
+    const isMaximized = win.isMaximized()
+    const b = isMaximized ? win.getNormalBounds() : win.getBounds()
+    void setWindowState({
+      bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+      isMaximized
+    })
   })
 
   win.webContents.setWindowOpenHandler((details) => {
@@ -87,7 +122,7 @@ function createWindow(): BrowserWindow {
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -98,7 +133,7 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  const win = createWindow()
+  const win = await createWindow()
   const server = new ManagedServer()
   server.onLog((line) => win.webContents.send('mc:server:log', line))
   server.onStatus((s) => win.webContents.send('mc:server:status', s))
@@ -209,6 +244,8 @@ app.whenReady().then(() => {
     }
   )
 
+  ipcMain.handle('mc:app:version', async (): Promise<string> => app.getVersion())
+
   ipcMain.handle('mc:app:uninstall', async (): Promise<boolean> => {
     const uninstaller = findUninstallerPath()
     if (uninstaller) {
@@ -224,6 +261,8 @@ app.whenReady().then(() => {
     return false
   })
 
+  ipcMain.handle('mc:update:repo', async (): Promise<UpdateRepoInfo> => parseAppUpdateRepo())
+
   ipcMain.handle('mc:update:get', async (): Promise<UpdateStatus> => updateStatus)
 
   ipcMain.handle('mc:update:check', async (): Promise<boolean> => {
@@ -235,7 +274,8 @@ app.whenReady().then(() => {
       await autoUpdater.checkForUpdates()
       return true
     } catch (e) {
-      emitUpdateStatus({ state: 'error', message: String(e) })
+      void e
+      emitUpdateStatus({ state: 'error', message: '更新檢查失敗，請稍後再試' })
       return false
     }
   })
@@ -246,7 +286,8 @@ app.whenReady().then(() => {
       autoUpdater.quitAndInstall()
       return true
     } catch (e) {
-      emitUpdateStatus({ state: 'error', message: String(e) })
+      void e
+      emitUpdateStatus({ state: 'error', message: '更新套用失敗，請重新開程式再試' })
       return false
     }
   })

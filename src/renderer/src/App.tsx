@@ -107,6 +107,8 @@ type UpdateStatus =
   | { state: 'downloaded'; message: string; version?: string }
   | { state: 'error'; message: string }
 
+type UpdateRepoInfo = { owner: string; repo: string } | null
+
 type CoreInfo = { id: CoreType; label: string }
 
 const sanitizeFolderName = (name: string): string => {
@@ -136,6 +138,8 @@ function App(): React.JSX.Element {
   const [cmd, setCmd] = React.useState<string>('')
   const [settings, setSettings] = React.useState<AppSettings | null>(null)
   const [updateStatus, setUpdateStatus] = React.useState<UpdateStatus | null>(null)
+  const [appVersion, setAppVersion] = React.useState<string>('')
+  const [updateRepo, setUpdateRepo] = React.useState<UpdateRepoInfo>(null)
 
   const selected = React.useMemo(
     () => profiles.find((p) => p.id === selectedId) ?? null,
@@ -149,15 +153,19 @@ function App(): React.JSX.Element {
     let unsubDl: () => void = () => undefined
     let unsubUpdate: () => void = () => undefined
     ;(async () => {
-      const [c, s, st] = await Promise.all([
+      const [c, s, st, v, repo] = await Promise.all([
         window.api.listCores(),
         window.api.getState(),
-        window.api.getSettings()
+        window.api.getSettings(),
+        window.api.getAppVersion(),
+        window.api.getUpdateRepo()
       ])
       setCores(c as unknown as CoreInfo[])
       setProfiles((s as unknown as PersistedState).profiles)
       setSelectedId((s as unknown as PersistedState).profiles[0]?.id ?? null)
       setSettings(st as unknown as AppSettings)
+      setAppVersion(String(v ?? ''))
+      setUpdateRepo((repo as unknown as UpdateRepoInfo) ?? null)
       unsubLog = window.api.onServerLog((line) => setLogs((prev) => [...prev.slice(-2000), line]))
       unsubStatus = window.api.onServerStatus((st) => setStatus(st))
       unsubDl = window.api.onDownloadProgress((p) => setDownload(p))
@@ -494,7 +502,9 @@ function App(): React.JSX.Element {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>Minecraft Server Manager</div>
+          <div style={{ fontSize: 16, fontWeight: 700 }}>
+            Minecraft Server Manager{appVersion ? ` v${appVersion}` : ''}
+          </div>
           <div style={{ fontSize: 12, opacity: 0.85 }}>狀態：{status}</div>
         </div>
 
@@ -623,6 +633,17 @@ function App(): React.JSX.Element {
                       開下載資料夾
                     </button>
                     <button onClick={checkForUpdates}>檢查更新</button>
+                    <button
+                      onClick={() =>
+                        updateRepo &&
+                        window.open(
+                          `https://github.com/${updateRepo.owner}/${updateRepo.repo}/releases`
+                        )
+                      }
+                      disabled={!updateRepo}
+                    >
+                      開 Release
+                    </button>
                     {updateStatus?.state === 'downloaded' ? (
                       <button onClick={quitAndInstallUpdate}>重啟更新</button>
                     ) : null}

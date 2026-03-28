@@ -74,9 +74,15 @@ export interface AppSettings {
   downloadRoot: string
 }
 
+export interface WindowState {
+  bounds: { x: number; y: number; width: number; height: number }
+  isMaximized: boolean
+}
+
 interface PersistedState {
   profiles: ServerProfile[]
   settings?: Partial<AppSettings>
+  windowState?: WindowState
 }
 
 const DEFAULT_ROOT = 'C:\\MinecraftServers'
@@ -90,6 +96,18 @@ const normalizeSettings = (s?: Partial<AppSettings>): AppSettings => {
       typeof s?.downloadRoot === 'string' && s.downloadRoot.trim().length
         ? s.downloadRoot
         : DEFAULT_DOWNLOAD_ROOT()
+  }
+}
+
+const normalizeWindowState = (w?: WindowState): WindowState | undefined => {
+  if (!w) return undefined
+  const b = w.bounds
+  if (!b) return undefined
+  if (![b.x, b.y, b.width, b.height].every((n) => Number.isFinite(n))) return undefined
+  if (b.width < 400 || b.height < 300) return undefined
+  return {
+    bounds: { x: b.x, y: b.y, width: b.width, height: b.height },
+    isMaximized: Boolean(w.isMaximized)
   }
 }
 
@@ -157,14 +175,16 @@ export const defaultProfilePathAt = (root: string, profileName: string): string 
 
 export const loadState = async (): Promise<PersistedState> => {
   const p = stateFilePath()
-  if (!existsSync(p)) return { profiles: [], settings: normalizeSettings() }
+  if (!existsSync(p))
+    return { profiles: [], settings: normalizeSettings(), windowState: normalizeWindowState() }
   const raw = await readFile(p, 'utf-8')
   const parsed = safeJsonParse<PersistedState>(raw)
   if (!parsed || !Array.isArray(parsed.profiles))
-    return { profiles: [], settings: normalizeSettings() }
+    return { profiles: [], settings: normalizeSettings(), windowState: normalizeWindowState() }
   return {
     profiles: parsed.profiles.filter((p) => p && typeof p.id === 'string'),
-    settings: normalizeSettings(parsed.settings)
+    settings: normalizeSettings(parsed.settings),
+    windowState: normalizeWindowState(parsed.windowState)
   }
 }
 
@@ -173,7 +193,8 @@ export const saveState = async (next: PersistedState): Promise<void> => {
   await ensureDir(dirname(p))
   const normalized: PersistedState = {
     profiles: next.profiles ?? [],
-    settings: normalizeSettings(next.settings)
+    settings: normalizeSettings(next.settings),
+    windowState: normalizeWindowState(next.windowState)
   }
   await writeFile(p, JSON.stringify(normalized, null, 2), 'utf-8')
 }
@@ -187,10 +208,21 @@ export const setSettings = async (patch: Partial<AppSettings>): Promise<AppSetti
   const s = await loadState()
   const next: PersistedState = {
     profiles: s.profiles,
-    settings: { ...(s.settings ?? {}), ...(patch ?? {}) }
+    settings: { ...(s.settings ?? {}), ...(patch ?? {}) },
+    windowState: s.windowState
   }
   await saveState(next)
   return normalizeSettings(next.settings)
+}
+
+export const getWindowState = async (): Promise<WindowState | undefined> => {
+  const s = await loadState()
+  return s.windowState
+}
+
+export const setWindowState = async (w?: WindowState): Promise<void> => {
+  const s = await loadState()
+  await saveState({ profiles: s.profiles, settings: s.settings, windowState: w })
 }
 
 export const createDefaultProfile = (): ServerProfile => {
